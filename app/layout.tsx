@@ -35,8 +35,16 @@ export default function RootLayout({
       lang="en"
       className={`dark ${geistSans.variable} ${geistMono.variable}`}
     >
-      <body className="bg-background font-sans antialiased">
-        {children}
+      <body className="bg-background font-sans antialiased min-h-screen flex flex-col">
+        <div className="flex-1">{children}</div>
+        
+        {/* Added Footer */}
+        <footer className="w-full py-6 text-center text-xs text-muted-foreground border-t border-border/40">
+          <p>
+            BioVal Analytics &mdash; Built with precision by <span className="font-semibold text-foreground">Roshan Puri</span>
+          </p>
+        </footer>
+
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
