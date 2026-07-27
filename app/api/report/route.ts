@@ -10,7 +10,7 @@ import type { ReportData, RiskLevel } from '@/lib/types'
 
 export const maxDuration = 30
 
-const MODEL = 'openai/gpt-5.4-mini'
+const MODEL = 'openai/gpt-4o-mini'
 
 const insightSchema = z.object({
   refinedIndication: z
@@ -267,24 +267,98 @@ function fallbackCompetitors(indication: string): Competitor[] {
   return GENERIC_COMPETITORS
 }
 
+// Dynamic Payer & Regulatory Insights Map
+const INSIGHT_MAP: {
+  keywords: string[]
+  payerLevel: RiskLevel
+  payerBullets: string[]
+  regulatoryBullets: string[]
+}[] = [
+  {
+    keywords: ['oncology', 'cancer', 'tumor', 'tumour', 'carcinoma', 'nsclc', 'breast', 'melanoma', 'prostate', 'myeloma', 'leukemia', 'sarcoma'],
+    payerLevel: 'High',
+    payerBullets: [
+      'High acquisition cost will trigger intensive utilization management and prior authorization.',
+      'Reimbursement contingent on clear overall survival (OS) or progression-free survival (PFS) benefit.',
+      'Outpatient hospital (340B) and specialty oncology channel routing expected.',
+    ],
+    regulatoryBullets: [
+      'Eligible for Accelerated Approval pathway if backed by robust surrogate endpoints.',
+      'FDA expected to require post-marketing confirmatory trials (Phase 4 commitment).',
+    ],
+  },
+  {
+    keywords: ['diabetes', 'obesity', 'metabolic', 'glycemic', 'weight', 'overweight'],
+    payerLevel: 'Low',
+    payerBullets: [
+      'High volume demand will drive aggressive step-therapy mandates behind incumbent GLP-1s.',
+      'Formulary positioning will require substantial gross-to-net discounting and rebates.',
+      'Employer group coverage variation may impact initial commercial adoption.',
+    ],
+    regulatoryBullets: [
+      'FDA requires rigorous cardiovascular outcome trials (CVOT) to confirm long-term safety.',
+      'Scrutiny focused on gastrointestinal tolerability, lean mass preservation, and patient retention.',
+    ],
+  },
+  {
+    keywords: ['alzheimer', 'dementia', 'depression', 'ptsd', 'schizophrenia', 'psychosis', 'mdd', 'cognitive', 'bipolar', 'sclerosis'],
+    payerLevel: 'High',
+    payerBullets: [
+      'Payers will scrutinize clinical meaningfulness versus statistical significance in cognitive endpoints.',
+      'Coverage with Evidence Development (CED) or registry requirements likely for full reimbursement.',
+      'Restricted initial access to specialized centers with standardized diagnostic capability.',
+    ],
+    regulatoryBullets: [
+      'Heightened FDA scrutiny regarding CNS penetration and long-term neuro safety profile.',
+      'Advisory Committee (PCNS) meeting highly expected prior to regulatory decision.',
+    ],
+  },
+  {
+    keywords: ['heart', 'cardiovascular', 'cardiac', 'hypertension', 'arthritis', 'psoriasis', 'crohn', 'colitis', 'asthma', 'copd'],
+    payerLevel: 'Medium',
+    payerBullets: [
+      'Broad formulary placement conditional on demonstrating reduced acute hospitalization rates.',
+      'Step therapy mandated through established generic and biosimilar standard-of-care options.',
+      'Commercial plans likely to push for outcomes-based pricing or value-based rebates.',
+    ],
+    regulatoryBullets: [
+      'Standard 10-month FDA review cycle expected unless Granted Fast Track status.',
+      'Requires multi-year durability data on safety endpoints before label expansion.',
+    ],
+  },
+]
+
 function fallbackInsight(facts: TrialFacts): Insight {
+  const text = (facts.indication || facts.drugName || '').toLowerCase()
+  const matched = INSIGHT_MAP.find((entry) =>
+    entry.keywords.some((kw) => text.includes(kw))
+  )
+
+  const payerLevel = matched ? matched.payerLevel : 'Medium'
+  const payerBullets = matched
+    ? matched.payerBullets
+    : [
+        'Coverage likely to require step therapy through established standard-of-care options first.',
+        'Prior authorization and specialty-pharmacy channels expected given the therapeutic class.',
+        'Value narrative will hinge on durable outcomes versus incumbent regimens.',
+      ]
+  const regulatoryBullets = matched
+    ? matched.regulatoryBullets
+    : [
+        'FDA likely to scrutinize primary endpoint durability and long-term safety follow-up.',
+        'Competitive class precedent suggests an advisory committee is possible before approval.',
+      ]
+
   return {
-    refinedIndication: facts.indication,
+    refinedIndication: facts.indication !== 'Not specified' ? facts.indication : facts.drugName,
     peakSalesUsdM: 1200,
     yearsToPeak: 5,
     yearsToLaunch: 3,
     payerSentiment: {
-      level: 'Medium',
-      bullets: [
-        'Coverage likely to require step therapy through established standard-of-care options first.',
-        'Prior authorization and specialty-pharmacy channels expected given the therapeutic class.',
-        'Value narrative will hinge on durable outcomes versus incumbent regimens.',
-      ],
+      level: payerLevel,
+      bullets: payerBullets,
     },
-    regulatoryOutlook: [
-      'FDA likely to scrutinize primary endpoint durability and long-term safety follow-up.',
-      'Competitive class precedent suggests an advisory committee is possible before approval.',
-    ],
+    regulatoryOutlook: regulatoryBullets,
     competitors: fallbackCompetitors(facts.indication),
   }
 }
@@ -326,7 +400,7 @@ function estimatedFacts(query: string): TrialFacts {
     phaseKey: 'PHASE2',
     status: 'Estimated (no registry match)',
     sponsor: 'Undisclosed Sponsor',
-    indication: 'Not specified',
+    indication: query.trim(),
     briefTitle: '',
   }
 }
